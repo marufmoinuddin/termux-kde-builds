@@ -1,0 +1,20 @@
+--- ../CMakeLists.txt	2025-07-01 17:10:32.000000000 +0530
++++ CMakeLists.txt	2025-07-13 12:05:06.044866208 +0530
+@@ -74,7 +74,7 @@
+         )
+     endif()
+ 
+-    find_package(Sensors)
++#    find_package(Sensors)
+     set_package_properties(Sensors PROPERTIES
+         TYPE REQUIRED
+         PURPOSE "Used for reading hardware sensors")
+@@ -97,7 +97,7 @@
+ 
+ add_subdirectory( formatter )
+ add_subdirectory( processcore )
+-add_subdirectory( sensors )
++#add_subdirectory( sensors )
+ add_subdirectory( faces )
+ add_subdirectory( systemstats )
+ 
