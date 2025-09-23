@@ -1,1 +1,1 @@
-# termux-kde-builds
+# termux-kde-builds [outdated]
