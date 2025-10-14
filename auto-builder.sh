@@ -192,25 +192,25 @@ declare -A PACKAGES=(
     ["frameworkintegration"]="6.16.0||https://github.com/KDE/frameworkintegration.git|v6.16.0|kf6-kconfig,kf6-knotifications|-DBUILD_WITH_QT6=ON||false|"
     ["breeze"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/breeze-6.4.2.tar.xz|||qt6-qtbase,kf6-kconfig,kf6-kwindowsystem|-DBUILD_QT6=ON -DBUILD_QT5=OFF||false|"
     ["breeze-gtk"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/breeze-gtk-6.4.2.tar.xz|||qt6-qtbase,sassc,pycairo|-DBUILD_WITH_QT6=ON||false|"
-    ["kdoctools"]="6.16.0||https://github.com/KDE/kdoctools.git|v6.16.0|kf6-karchive,docbook-xml,docbook-xsl|ln -s \$PWD/bin/meinproc6 \$HOME/bin/KF6::meinproc6; export PATH=\"\$HOME/bin:\$PATH\"||false|"
+    ["kdoctools"]="6.16.0||https://github.com/KDE/kdoctools.git|v6.16.0|kf6-karchive,docbook-xml,docbook-xsl|||false||mkdir -p \$HOME/bin; ln -s \$PWD/bin/meinproc6 \$HOME/bin/KF6::meinproc6; export PATH=\"\$HOME/bin:\$PATH\""
     ["qtpositioning"]="6.9.1||https://github.com/qt/qtpositioning.git|v6.9.1|qt6-qtbase||true||"
     ["qtlocation"]="6.9.1||https://github.com/qt/qtlocation.git|v6.9.1|qt6-qtbase,kde-qtpositioning||true||"
     ["qcoro"]="0.12.0||https://github.com/qcoro/qcoro.git|v0.12.0|qt6-qtbase,kf6-kcoreaddons||true||"
     ["libplasma"]="6.4.2||https://github.com/KDE/libplasma.git|v6.4.2|qt6-qtbase,kf6-kconfig,kf6-kwindowsystem|-DBUILD_WITH_QT6=ON||false|"
     ["kstatusnotifieritem"]="6.19.0||https://github.com/KDE/kstatusnotifieritem.git|v6.19.0|kf6-knotifications|-DBUILD_WITH_QT6=ON -DBUILD_PYTHON_BINDINGS=OFF||false|"
     ["kdnssd"]="6.16.0||https://github.com/KDE/kdnssd.git|v6.16.0|qt6-qtbase,kf6-kcoreaddons|-DBUILD_WITH_QT6=ON||false|"
-    ["syntax-highlighting"]="6.16.0||https://github.com/KDE/syntax-highlighting.git|v6.16.0|qt6-qtbase,kf6-kcoreaddons|sed -i 's|add_subdirectory(quick)|#&|' src/CMakeLists.txt"
-    ["libproxy"]="master||https://github.com/libproxy/libproxy.git|master|gsettings-desktop-schemas,duktape,gobject-introspection|meson setup build --prefix=\$TERMUX_PREFIX -Dvapi=false -Ddocs=false -Dintrospection=false; termux_step_make_install() { meson compile -C build; meson install -C build --destdir \$TERMUX_PKG_STAGEDIR; }||false|"
+    ["syntax-highlighting"]="6.16.0||https://github.com/KDE/syntax-highlighting.git|v6.16.0|qt6-qtbase,kf6-kcoreaddons||sed -i 's|add_subdirectory(quick)|#&|' src/CMakeLists.txt|false||"
+    ["libproxy"]="master||https://github.com/libproxy/libproxy.git|master|gsettings-desktop-schemas,duktape,gobject-introspection|||false||meson setup build --prefix=\$TERMUX_PREFIX -Dvapi=false -Ddocs=false -Dintrospection=false; termux_step_make_install() { meson compile -C build; meson install -C build --destdir \$TERMUX_PKG_STAGEDIR; }"
     ["libkexiv2"]="25.07.80||https://github.com/KDE/libkexiv2.git|v25.07.80|qt6-qtbase,kf6-kcoreaddons|-DBUILD_WITH_QT6=ON||false|"
     ["phonon"]="4.12.0||https://github.com/KDE/phonon.git|v4.12.0|qt6-qtbase,pulseaudio-glib|-DPHONON_BUILD_QT5=OFF -DPHONON_BUILD_QT6=ON||false|"
-    ["kio-extras"]="25.07.80|https://github.com/KDE/kio-extras/archive/refs/tags/v25.07.80.tar.gz|||qt6-qtbase,kf6-kio,openexr|sed -i '/target_link_libraries(kio_thumbnail/a\        android-shmem' thumbnail/CMakeLists.txt|-DBUILD_WITH_QT6=ON||false|"
+    ["kio-extras"]="25.07.80|https://github.com/KDE/kio-extras/archive/refs/tags/v25.07.80.tar.gz|||qt6-qtbase,kf6-kio,openexr|-DBUILD_WITH_QT6=ON|sed -i '/target_link_libraries(kio_thumbnail/a\\        android-shmem' thumbnail/CMakeLists.txt|false||"
     ["kparts"]="6.16.0||https://github.com/KDE/kparts.git|v6.16.0|kf6-kio,kf6-kxmlgui|-DBUILD_WITH_QT6=ON||false|"
     ["krunner"]="6.16.0||https://github.com/KDE/krunner.git|v6.16.0|kf6-kcoreaddons,kf6-kio|-DBUILD_WITH_QT6=ON||false|"
     ["prison"]="6.16.0||https://github.com/KDE/prison.git|v6.16.0|qt6-qtbase,libqrencode,libzxing-cpp,libdmtx|-DBUILD_WITH_QT6=ON||false|"
     ["qtspeech"]="6.9.1||https://github.com/qt/qtspeech.git|v6.9.1|qt6-qtbase||true||"
     ["ktexteditor"]="6.16.0||https://github.com/KDE/ktexteditor.git|v6.16.0|kf6-kio,kde-syntax-highlighting|-DBUILD_WITH_QT6=ON||false|"
     ["kunitconversion"]="6.16.0||https://github.com/KDE/kunitconversion.git|v6.16.0|kf6-kcoreaddons|-DBUILD_WITH_QT6=ON -DBUILD_PYTHON_BINDINGS=OFF||false|"
-    ["spirv-tools"]="master||https://github.com/KhronosGroup/SPIRV-Tools.git|master||python3 utils/git-sync-deps|-DCMAKE_EXE_LINKER_FLAGS=\"-llog\"||false"
+    ["spirv-tools"]="master||https://github.com/KhronosGroup/SPIRV-Tools.git|master||-DCMAKE_EXE_LINKER_FLAGS=\"-llog\"|python3 utils/git-sync-deps|false||"
     ["kdeclarative"]="6.16.0||https://github.com/KDE/kdeclarative.git|v6.16.0|kf6-kio,kde-spirv-tools|-DBUILD_WITH_QT6=ON||false|"
     ["baloo"]="6.16.0||https://github.com/KDE/baloo.git|v6.16.0|kf6-kio,liblmdb|-DBUILD_WITH_QT6=ON||false|"
     ["baloo-widgets"]="25.07.80||https://github.com/KDE/baloo-widgets.git|v25.07.80|kf6-kio,kde-baloo|-DBUILD_WITH_QT6=ON||false|"
@@ -221,16 +221,16 @@ declare -A PACKAGES=(
     ["kglobalaccel"]="6.16.0||https://github.com/KDE/kglobalaccel.git|v6.16.0|kf6-kcoreaddons|-DBUILD_WITH_QT6=ON||false|"
     ["kholidays"]="6.16.0||https://github.com/KDE/kholidays.git|v6.16.0|qt6-qtbase|-DBUILD_WITH_QT6=ON||false|"
     ["knighttime"]="master||https://invent.kde.org/plasma/knighttime.git|master|kf6-kcoreaddons|-DBUILD_WITH_QT6=ON||false|"
-    ["wayland-protocols"]="master||https://gitlab.freedesktop.org/wayland/wayland-protocols.git|master||meson setup build --prefix=\$TERMUX_PREFIX --buildtype=release; termux_step_make_install() { ninja -j\$(nproc); ninja install DESTDIR=\$TERMUX_PKG_STAGEDIR; }||false|"
-    ["kscreenlocker"]="6.4.2||https://invent.kde.org/plasma/kscreenlocker.git|v6.4.2|kf6-kwindowsystem|sed -i 's|find_package(PAM REQUIRED)|#&|' CMakeLists.txt; sed -i 's"
+    ["wayland-protocols"]="master||https://gitlab.freedesktop.org/wayland/wayland-protocols.git|master||||false||meson setup build --prefix=\$TERMUX_PREFIX --buildtype=release; termux_step_make_install() { ninja -j\$(nproc); ninja install DESTDIR=\$TERMUX_PKG_STAGEDIR; }"
+    ["kscreenlocker"]="6.4.2||https://invent.kde.org/plasma/kscreenlocker.git|v6.4.2|kf6-kwindowsystem||sed -i 's|find_package(PAM REQUIRED)|#&|' CMakeLists.txt; sed -i 's|add_subdirectory(greeter)|#&|' CMakeLists.txt|false||"
     ["libqaccessibilityclient"]="master||https://invent.kde.org/libraries/libqaccessibilityclient.git|master|qt6-qtbase||false||"
-    ["kwin-x11"]="master||https://invent.kde.org/plasma/kwin-x11.git|stable|qt6-qtbase,kf6-kwindowsystem,xwayland,libxcvt,libdisplay-info|sed -i 's|find_package(UDev)|#&|' CMakeLists.txt; sed -i 's"
+    ["kwin-x11"]="master||https://invent.kde.org/plasma/kwin-x11.git|stable|qt6-qtbase,kf6-kwindowsystem,xwayland,libxcvt,libdisplay-info||sed -i 's|find_package(UDev)|#&|' CMakeLists.txt; sed -i 's|UDev::UDev|#&|' src/CMakeLists.txt; sed -i '/PUBLIC$/,/epoxy::epoxy$/{s/epoxy::epoxy/epoxy::epoxy android-shmem/}' src/CMakeLists.txt; sed -i '/set(kcm_libs$/,/KF6::XmlGui$/a\\    Qt::DBus\\n    android-shmem' src/kcms/rules/CMakeLists.txt|false||"
     ["kded"]="6.16.0||https://github.com/KDE/kded.git|v6.16.0|kf6-kcoreaddons|-DBUILD_WITH_QT6=ON||false|"
-    ["appstream"]="master||https://github.com/ximion/appstream.git|master|qt6-qtbase|meson setup builddir --prefix=\$TERMUX_PREFIX -Dqt=true -Dvapi=false -Ddocs=false -Dapidocs=false -Dgir=true -Dsystemd=false -Dstemming=false; termux_step_make_install() { ninja -j\$(nproc); ninja install DESTDIR=\$TERMUX_PKG_STAGEDIR; }||false|"
+    ["appstream"]="master||https://github.com/ximion/appstream.git|master|qt6-qtbase|||false||meson setup builddir --prefix=\$TERMUX_PREFIX -Dqt=true -Dvapi=false -Ddocs=false -Dapidocs=false -Dgir=true -Dsystemd=false -Dstemming=false; termux_step_make_install() { ninja -j\$(nproc); ninja install DESTDIR=\$TERMUX_PKG_STAGEDIR; }"
     ["kquickcharts"]="master||https://github.com/KDE/kquickcharts.git|master|qt6-qtbase,kf6-kcoreaddons|-DBUILD_WITH_QT6=ON||false|"
-    ["plasma-workspace"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/plasma-workspace-6.4.2.tar.xz|||qt6-qtbase,kf6-kio,kde-kwin-x11|sed -i 's|find_package(KWinDBusInterface CONFIG REQUIRED)|find_package(KWinX11DBusInterface CONFIG REQUIRED)|' CMakeLists.txt; sed -i 's"
+    ["plasma-workspace"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/plasma-workspace-6.4.2.tar.xz|||qt6-qtbase,kf6-kio,kde-kwin-x11|-DBUILD_WITH_QT6=ON -DBUILD_CAMERAINDICATOR=OFF|sed -i 's|find_package(KWinDBusInterface CONFIG REQUIRED)|find_package(KWinX11DBusInterface CONFIG REQUIRED)|' CMakeLists.txt; sed -i 's|find_package(UDev REQUIRED)|#&|' CMakeLists.txt; sed -i 's|find_package(PolkitQt6-1)|#&|' CMakeLists.txt; sed -i 's|find_package(KSysGuard|#&|' CMakeLists.txt; sed -i 's|add_subdirectory(region_language)|#&|' kcms/CMakeLists.txt; sed -i 's|add_subdirectory(users)|#&|' kcms/CMakeLists.txt; sed -i 's|add_subdirectory(devicenotifications)|#&|' CMakeLists.txt|false||"
     ["plasma-workspace-wallpapers"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/plasma-workspace-wallpapers-6.4.2.tar.xz|||qt6-qtbase|-DBUILD_WITH_QT6=ON||false|"
-    ["noto-fonts"]="master||mkdir -p \$TERMUX_PKG_STAGEDIR\$TERMUX_PREFIX/share/fonts; wget -P \$TERMUX_PKG_STAGEDIR\$TERMUX_PREFIX/share/fonts https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSans/NotoSans-Regular.ttf; wget -P \$TERMUX_PKG_STAGEDIR\$TERMUX_PREFIX/share/fonts https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSans/NotoSans-Bold.ttf; wget -P \$TERMUX_PKG_STAGEDIR\$TERMUX_PREFIX/share/fonts https://github.com/googlefonts/noto-emoji/raw/main/fonts/NotoColorEmoji.ttf; fc-cache -fv||true||||"
+    ["noto-fonts"]="master||||||false||mkdir -p \$TERMUX_PKG_STAGEDIR\$TERMUX_PREFIX/share/fonts; wget -P \$TERMUX_PKG_STAGEDIR\$TERMUX_PREFIX/share/fonts https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSans/NotoSans-Regular.ttf; wget -P \$TERMUX_PKG_STAGEDIR\$TERMUX_PREFIX/share/fonts https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSans/NotoSans-Bold.ttf; wget -P \$TERMUX_PKG_STAGEDIR\$TERMUX_PREFIX/share/fonts https://github.com/googlefonts/noto-emoji/raw/main/fonts/NotoColorEmoji.ttf; fc-cache -fv"
     ["plasma-integration"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/plasma-integration-6.4.2.tar.xz|||qt6-qtbase,kf6-kio|-DBUILD_QT5=OFF -DBUILD_QT6=ON||false|"
     ["milou"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/milou-6.4.2.tar.xz|||qt6-qtbase,kde-krunner|-DBUILD_WITH_QT6=ON||false|"
     ["ocean-sound-theme"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/ocean-sound-theme-6.4.2.tar.xz|||qt6-qtbase|-DBUILD_WITH_QT6=ON||false|"
@@ -245,7 +245,7 @@ declare -A PACKAGES=(
     ["plasma-sdk"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/plasma-sdk-6.4.2.tar.xz|||qt6-qtbase,kf6-kio||false||"
     ["qqc2-breeze-style"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/qqc2-breeze-style-6.4.2.tar.xz|||qt6-qtbase,kf6-kirigami||false||"
     ["qqc2-desktop-style"]="master||https://github.com/KDE/qqc2-desktop-style.git|master|qt6-qtbase,kf6-kirigami||false||"
-    ["plasma-desktop"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/plasma-desktop-6.4.2.tar.xz|||qt6-qtbase,kf6-kio,kde-kwin-x11|sed -i 's|find_package(KSysGuard CONFIG REQUIRED)|find_package(KWinX11DBusInterface CONFIG REQUIRED)|' CMakeLists.txt; sed -i 's"
+    ["plasma-desktop"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/plasma-desktop-6.4.2.tar.xz|||qt6-qtbase,kf6-kio,kde-kwin-x11||sed -i 's|find_package(KSysGuard CONFIG REQUIRED)|find_package(KWinX11DBusInterface CONFIG REQUIRED)|' CMakeLists.txt; sed -i 's|pkg_check_modules(LIBWACOM libwacom REQUIRED)|#&|' CMakeLists.txt; sed -i 's|find_package(UDev)|#&|' CMakeLists.txt; sed -i 's|PkgConfig::LIBWACOM|#&|g' kcms/tablet/CMakeLists.txt; sed -i 's|PkgConfig::LIBWACOM|#&|g' applets/taskmanager/CMakeLists.txt|false||"
     ["systemsettings"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/systemsettings-6.4.2.tar.xz|||qt6-qtbase,kde-kcmutils,kde-plasma-desktop|-DBUILD_WITH_QT6=ON||false|"
 )
 
@@ -262,12 +262,17 @@ done
 
 # Install all generated .deb files
 echo "Installing all .deb packages..."
-for deb in "$DEBS_DIR"/*.deb; do
-    pkg install "$deb" -y || {
-        echo "Failed to install $deb. Check logs."
-        exit 1
-    }
-done
+if ls "$DEBS_DIR"/*.deb 1> /dev/null 2>&1; then
+    for deb in "$DEBS_DIR"/*.deb; do
+        pkg install "$deb" -y || {
+            echo "Failed to install $deb. Check logs."
+            exit 1
+        }
+    done
+else
+    echo "No .deb files found in $DEBS_DIR. Build may have failed."
+    exit 1
+fi
 
 # Set up environment
 echo "Setting up environment..."
