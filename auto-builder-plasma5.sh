@@ -1,17 +1,17 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 # Optimized KDE Plasma 6.4.2 Builder for Termux
-# Builds packages incrementally with proper error handling and logging
+# Builds packages incrementally with proper error handling
 
 set -e
 set -o pipefail
 
-# Colors for output
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 # Configuration
 PLASMA_VERSION="6.4.2"
@@ -29,56 +29,79 @@ export LDFLAGS="-Wl,-O3 -Wl,--as-needed"
 export MAKEFLAGS="-j${BUILD_JOBS}"
 
 # Helper functions
-log() {
-    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $*"
-}
+log() { echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $*"; }
+error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
+warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
+info() { echo -e "${BLUE}[INFO]${NC} $*"; }
 
-error() {
-    echo -e "${RED}[ERROR]${NC} $*" >&2
-}
-
-warn() {
-    echo -e "${YELLOW}[WARN]${NC} $*"
-}
-
-info() {
-    echo -e "${BLUE}[INFO]${NC} $*"
-}
-
-# Check if package is already built
 is_built() {
-    local pkg_name="$1"
-    local marker="$BUILD_ROOT/.built_${pkg_name}"
-    [[ -f "$marker" ]]
+    [[ -f "$BUILD_ROOT/.built_$1" ]]
 }
 
-# Mark package as built
 mark_built() {
-    local pkg_name="$1"
-    touch "$BUILD_ROOT/.built_${pkg_name}"
+    touch "$BUILD_ROOT/.built_$1"
+    log "✓ $1 marked as complete"
 }
 
-# Download and extract package
+# Safe package installation
+pkg_install() {
+    local packages=("$@")
+    local failed=()
+    
+    for pkg in "${packages[@]}"; do
+        if dpkg -l | grep -q "^ii  $pkg "; then
+            info "$pkg already installed"
+        else
+            if pkg install -y "$pkg" 2>&1 | grep -v "^Reading\|^Building\|^Get:\|^Hit:"; then
+                info "✓ Installed $pkg"
+            else
+                warn "Could not install $pkg (may not exist)"
+                failed+=("$pkg")
+            fi
+        fi
+    done
+    
+    if [[ ${#failed[@]} -gt 0 ]]; then
+        warn "These packages were not installed: ${failed[*]}"
+        warn "Continuing anyway - they may not be needed"
+    fi
+}
+
+# Download with retry
 download_extract() {
     local url="$1"
     local pkg_name="$2"
     local filename=$(basename "$url")
     local cache_file="$DOWNLOAD_CACHE/$filename"
+    local max_retries=3
+    local retry=0
     
     if [[ ! -f "$cache_file" ]]; then
         log "Downloading $pkg_name..."
-        wget -q --show-progress -O "$cache_file" "$url" || {
-            error "Failed to download $url"
-            return 1
-        }
+        while [[ $retry -lt $max_retries ]]; do
+            if wget -q --show-progress --timeout=60 -O "$cache_file" "$url"; then
+                break
+            else
+                retry=$((retry + 1))
+                if [[ $retry -lt $max_retries ]]; then
+                    warn "Download failed, retry $retry/$max_retries..."
+                    sleep 2
+                else
+                    error "Failed to download $url after $max_retries attempts"
+                    rm -f "$cache_file"
+                    return 1
+                fi
+            fi
+        done
     else
         info "Using cached $filename"
     fi
     
+    cd "$BUILD_ROOT"
     if [[ "$filename" == *.tar.xz ]]; then
-        tar -xf "$cache_file" -C "$BUILD_ROOT" || return 1
+        tar -xf "$cache_file" || return 1
     elif [[ "$filename" == *.tar.gz ]]; then
-        tar -xzf "$cache_file" -C "$BUILD_ROOT" || return 1
+        tar -xzf "$cache_file" || return 1
     fi
 }
 
@@ -94,6 +117,11 @@ cmake_build() {
         return 0
     fi
     
+    if [[ ! -d "$src_dir" ]]; then
+        error "Source directory not found: $src_dir"
+        return 1
+    fi
+    
     log "Building $pkg_name..."
     cd "$src_dir"
     
@@ -101,30 +129,91 @@ cmake_build() {
     [[ -d "$build_dir" ]] && rm -rf "$build_dir"
     mkdir -p "$build_dir" && cd "$build_dir"
     
-    cmake .. \
-        -DCMAKE_INSTALL_PREFIX="$PREFIX" \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_SYSTEM_NAME=Linux \
-        -DBUILD_TESTING=OFF \
-        -DBUILD_WITH_QT6=ON \
-        "${extra_flags[@]}" \
-        2>&1 | tee "$LOG_DIR/${pkg_name}_cmake.log" || {
-        error "CMake failed for $pkg_name"
-        return 1
-    }
+    local log_file="$LOG_DIR/${pkg_name}_build.log"
     
-    make -j"$BUILD_JOBS" 2>&1 | tee "$LOG_DIR/${pkg_name}_make.log" || {
-        error "Make failed for $pkg_name"
-        return 1
-    }
+    {
+        echo "=== CMake Configuration ==="
+        cmake .. \
+            -DCMAKE_INSTALL_PREFIX="$PREFIX" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_C_FLAGS="${CFLAGS}" \
+            -DCMAKE_CXX_FLAGS="${CXXFLAGS}" \
+            -DCMAKE_EXE_LINKER_FLAGS="${LDFLAGS}" \
+            -DCMAKE_SHARED_LINKER_FLAGS="${LDFLAGS}" \
+            -DBUILD_TESTING=OFF \
+            -DBUILD_WITH_QT6=ON \
+            "${extra_flags[@]}" || exit 1
+        
+        echo ""
+        echo "=== Build ==="
+        make -j"$BUILD_JOBS" || exit 1
+        
+        echo ""
+        echo "=== Install ==="
+        make install || exit 1
+    } &> "$log_file"
     
-    make install 2>&1 | tee "$LOG_DIR/${pkg_name}_install.log" || {
-        error "Install failed for $pkg_name"
+    if [[ $? -eq 0 ]]; then
+        mark_built "$pkg_name"
+        log "✓ $pkg_name built successfully"
+        return 0
+    else
+        error "Build failed for $pkg_name - check $log_file"
+        tail -50 "$log_file"
         return 1
-    }
+    fi
+}
+
+# Ninja build
+ninja_build() {
+    local src_dir="$1"
+    local pkg_name="$2"
+    shift 2
+    local extra_flags=("$@")
     
-    mark_built "$pkg_name"
-    log "✓ $pkg_name built successfully"
+    if is_built "$pkg_name"; then
+        info "$pkg_name already built, skipping..."
+        return 0
+    fi
+    
+    if [[ ! -d "$src_dir" ]]; then
+        error "Source directory not found: $src_dir"
+        return 1
+    fi
+    
+    log "Building $pkg_name with Ninja..."
+    cd "$src_dir"
+    
+    local build_dir="build"
+    [[ -d "$build_dir" ]] && rm -rf "$build_dir"
+    mkdir -p "$build_dir" && cd "$build_dir"
+    
+    local log_file="$LOG_DIR/${pkg_name}_build.log"
+    
+    {
+        cmake .. \
+            -DCMAKE_INSTALL_PREFIX="$PREFIX" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_C_FLAGS="${CFLAGS}" \
+            -DCMAKE_CXX_FLAGS="${CXXFLAGS}" \
+            -G Ninja \
+            "${extra_flags[@]}" || exit 1
+        
+        ninja -j"$BUILD_JOBS" || exit 1
+        ninja install || exit 1
+    } &> "$log_file"
+    
+    if [[ $? -eq 0 ]]; then
+        mark_built "$pkg_name"
+        log "✓ $pkg_name built successfully"
+        return 0
+    else
+        error "Build failed for $pkg_name - check $log_file"
+        tail -50 "$log_file"
+        return 1
+    fi
 }
 
 # Meson build
@@ -139,39 +228,46 @@ meson_build() {
         return 0
     fi
     
+    if [[ ! -d "$src_dir" ]]; then
+        error "Source directory not found: $src_dir"
+        return 1
+    fi
+    
     log "Building $pkg_name with Meson..."
     cd "$src_dir"
     
-    meson setup builddir \
-        --prefix="$PREFIX" \
-        --buildtype=release \
-        "${extra_flags[@]}" \
-        2>&1 | tee "$LOG_DIR/${pkg_name}_meson.log" || {
-        error "Meson setup failed for $pkg_name"
-        return 1
-    }
+    [[ -d "builddir" ]] && rm -rf builddir
     
-    meson compile -C builddir -j"$BUILD_JOBS" 2>&1 | tee "$LOG_DIR/${pkg_name}_compile.log" || {
-        error "Meson compile failed for $pkg_name"
-        return 1
-    }
+    local log_file="$LOG_DIR/${pkg_name}_build.log"
     
-    meson install -C builddir 2>&1 | tee "$LOG_DIR/${pkg_name}_install.log" || {
-        error "Meson install failed for $pkg_name"
-        return 1
-    }
+    {
+        meson setup builddir \
+            --prefix="$PREFIX" \
+            --buildtype=release \
+            "${extra_flags[@]}" || exit 1
+        
+        meson compile -C builddir -j"$BUILD_JOBS" || exit 1
+        meson install -C builddir || exit 1
+    } &> "$log_file"
     
-    mark_built "$pkg_name"
-    log "✓ $pkg_name built successfully"
+    if [[ $? -eq 0 ]]; then
+        mark_built "$pkg_name"
+        log "✓ $pkg_name built successfully"
+        return 0
+    else
+        error "Build failed for $pkg_name - check $log_file"
+        tail -50 "$log_file"
+        return 1
+    fi
 }
 
-# Apply patch to CMakeLists
+# Apply patch
 patch_cmake() {
     local file="$1"
     local search="$2"
     local replace="$3"
     
-    if grep -q "$search" "$file" 2>/dev/null; then
+    if [[ -f "$file" ]] && grep -q "$search" "$file" 2>/dev/null; then
         sed -i "s|$search|$replace|g" "$file"
         info "Patched: $file"
     fi
@@ -184,208 +280,197 @@ init_environment() {
     mkdir -p "$BUILD_ROOT" "$LOG_DIR" "$DOWNLOAD_CACHE"
     cd "$BUILD_ROOT"
     
-    # Update packages
     log "Updating Termux packages..."
-    pkg update -y
+    pkg update -y 2>&1 | grep -v "^Reading\|^Building\|^Get:\|^Hit:" || true
     
-    # Install base dependencies
     log "Installing base dependencies..."
-    pkg install -y \
-        git cmake ninja make clang lld binutils \
-        python python-pip perl cpan wget curl jq \
-        extra-cmake-modules pkg-config
+    pkg_install git cmake ninja make clang lld binutils \
+        python wget curl jq extra-cmake-modules pkg-config
     
-    # Install libraries
-    log "Installing libraries..."
-    pkg install -y \
-        qt6* kf6* \
-        build-essential mesa libglvnd-dev \
-        libwayland-protocols vulkan-headers plasma-wayland-protocols \
-        libcap boost boost-headers xorgproto libxss sdl2 \
+    log "Installing Qt6 base packages..."
+    pkg_install qt6-qtbase qt6-qtdeclarative qt6-qtsvg qt6-qtwayland \
+        qt6-qtmultimedia qt6-qttools qt6-qt5compat
+    
+    log "Installing development tools..."
+    pkg_install build-essential mesa xorgproto \
+        libcap boost boost-headers libxss sdl2 \
         sassc docbook-xml docbook-xsl \
-        libqrencode libzxing-cpp libdmtx liblmdb \
-        openexr pulseaudio-glib \
-        xwayland libxcvt libdisplay-info \
-        gsettings-desktop-schemas duktape libduktape \
-        gobject-introspection editorconfig-core-c \
-        fontconfig-utils itstool spirv-tools
+        libqrencode libdmtx liblmdb openexr \
+        pulseaudio fontconfig itstool
     
-    # Python dependencies
-    pip install --upgrade meson pycairo
+    log "Installing additional repositories..."
+    pkg_install x11-repo tur-repo
     
-    # Perl dependencies
-    cpan install URI::Escape 2>&1 | grep -v "^Reading" || true
+    log "Installing Wayland/X11 packages..."
+    pkg_install libwayland xwayland libxcvt \
+        gsettings-desktop-schemas gobject-introspection
+    
+    log "Installing Python/Perl tools..."
+    pkg_install python-pip perl
+    
+    if ! command -v meson &> /dev/null; then
+        log "Installing Python packages..."
+        pip install --quiet --upgrade pip setuptools wheel
+        pip install --quiet meson pycairo
+    fi
+    
+    if ! perl -MURI::Escape -e 'exit 0' 2>/dev/null; then
+        log "Installing Perl modules..."
+        yes | cpan -T URI::Escape &> "$LOG_DIR/cpan.log" || warn "CPAN may have had issues"
+    fi
     
     log "Environment ready!"
 }
 
-# Main build sequence
+# Build sequence
 build_plasma() {
     log "Starting Plasma ${PLASMA_VERSION} build sequence..."
     
-    # KDE Frameworks
-    download_extract "https://github.com/KDE/kidletime/archive/refs/tags/v${KF_VERSION}.tar.gz" "kidletime"
-    cmake_build "$BUILD_ROOT/kidletime-${KF_VERSION}" "kidletime"
+    # KDE Frameworks (in dependency order)
+    local -a frameworks=(
+        "kidletime:${KF_VERSION}"
+        "kcmutils:${KF_VERSION}"
+        "ksvg:${KF_VERSION}"
+        "frameworkintegration:${KF_VERSION}"
+        "kdoctools:${KF_VERSION}"
+        "kstatusnotifieritem:${KF_VERSION}"
+        "kdnssd:${KF_VERSION}"
+        "kparts:${KF_VERSION}"
+        "krunner:${KF_VERSION}"
+        "prison:${KF_VERSION}"
+        "ktexteditor:${KF_VERSION}"
+        "kunitconversion:${KF_VERSION}"
+        "kdeclarative:${KF_VERSION}"
+        "baloo:${KF_VERSION}"
+        "kuserfeedback:${KF_VERSION}"
+        "kholidays:${KF_VERSION}"
+        "kded:${KF_VERSION}"
+    )
     
-    download_extract "https://github.com/KDE/kcmutils/archive/refs/tags/v${KF_VERSION}.tar.gz" "kcmutils"
-    cmake_build "$BUILD_ROOT/kcmutils-${KF_VERSION}" "kcmutils"
+    for fw in "${frameworks[@]}"; do
+        local name="${fw%%:*}"
+        local ver="${fw##*:}"
+        
+        download_extract "https://github.com/KDE/${name}/archive/refs/tags/v${ver}.tar.gz" "$name" || continue
+        
+        # Special handling for syntax-highlighting
+        if [[ "$name" == "syntax-highlighting" ]]; then
+            patch_cmake "$BUILD_ROOT/${name}-${ver}/src/CMakeLists.txt" \
+                "add_subdirectory(quick)" "#add_subdirectory(quick)"
+        fi
+        
+        # Special handling for kunitconversion and kstatusnotifieritem
+        if [[ "$name" == "kunitconversion" || "$name" == "kstatusnotifieritem" ]]; then
+            cmake_build "$BUILD_ROOT/${name}-${ver}" "$name" -DBUILD_PYTHON_BINDINGS=OFF
+        else
+            cmake_build "$BUILD_ROOT/${name}-${ver}" "$name"
+        fi
+    done
     
-    download_extract "https://github.com/KDE/ksvg/archive/refs/tags/v${KF_VERSION}.tar.gz" "ksvg"
-    cmake_build "$BUILD_ROOT/ksvg-${KF_VERSION}" "ksvg"
+    # Qt modules
+    local -a qt_modules=(
+        "qtpositioning"
+        "qtlocation"
+        "qtspeech"
+        "qtsensors"
+    )
     
-    download_extract "https://github.com/KDE/frameworkintegration/archive/refs/tags/v${KF_VERSION}.tar.gz" "frameworkintegration"
-    cmake_build "$BUILD_ROOT/frameworkintegration-${KF_VERSION}" "frameworkintegration"
-    
-    download_extract "https://github.com/KDE/kdoctools/archive/refs/tags/v${KF_VERSION}.tar.gz" "kdoctools"
-    cmake_build "$BUILD_ROOT/kdoctools-${KF_VERSION}" "kdoctools"
-    
-    download_extract "https://github.com/KDE/syntax-highlighting/archive/refs/tags/v${KF_VERSION}.tar.gz" "syntax-highlighting"
-    cd "$BUILD_ROOT/syntax-highlighting-${KF_VERSION}"
-    patch_cmake "src/CMakeLists.txt" "add_subdirectory(quick)" "#add_subdirectory(quick)"
-    cmake_build "$BUILD_ROOT/syntax-highlighting-${KF_VERSION}" "syntax-highlighting"
-    
-    download_extract "https://github.com/KDE/kstatusnotifieritem/archive/refs/tags/v${KF_VERSION}.tar.gz" "kstatusnotifieritem"
-    cmake_build "$BUILD_ROOT/kstatusnotifieritem-${KF_VERSION}" "kstatusnotifieritem" -DBUILD_PYTHON_BINDINGS=OFF
-    
-    download_extract "https://github.com/KDE/kdnssd/archive/refs/tags/v${KF_VERSION}.tar.gz" "kdnssd"
-    cmake_build "$BUILD_ROOT/kdnssd-${KF_VERSION}" "kdnssd"
-    
-    download_extract "https://github.com/KDE/kparts/archive/refs/tags/v${KF_VERSION}.tar.gz" "kparts"
-    cmake_build "$BUILD_ROOT/kparts-${KF_VERSION}" "kparts"
-    
-    download_extract "https://github.com/KDE/krunner/archive/refs/tags/v${KF_VERSION}.tar.gz" "krunner"
-    cmake_build "$BUILD_ROOT/krunner-${KF_VERSION}" "krunner"
-    
-    download_extract "https://github.com/KDE/prison/archive/refs/tags/v${KF_VERSION}.tar.gz" "prison"
-    cmake_build "$BUILD_ROOT/prison-${KF_VERSION}" "prison"
-    
-    download_extract "https://github.com/KDE/ktexteditor/archive/refs/tags/v${KF_VERSION}.tar.gz" "ktexteditor"
-    cmake_build "$BUILD_ROOT/ktexteditor-${KF_VERSION}" "ktexteditor"
-    
-    download_extract "https://github.com/KDE/kunitconversion/archive/refs/tags/v${KF_VERSION}.tar.gz" "kunitconversion"
-    cmake_build "$BUILD_ROOT/kunitconversion-${KF_VERSION}" "kunitconversion" -DBUILD_PYTHON_BINDINGS=OFF
-    
-    download_extract "https://github.com/KDE/kdeclarative/archive/refs/tags/v${KF_VERSION}.tar.gz" "kdeclarative"
-    cmake_build "$BUILD_ROOT/kdeclarative-${KF_VERSION}" "kdeclarative"
-    
-    download_extract "https://github.com/KDE/baloo/archive/refs/tags/v${KF_VERSION}.tar.gz" "baloo"
-    cmake_build "$BUILD_ROOT/baloo-${KF_VERSION}" "baloo"
-    
-    download_extract "https://github.com/KDE/kuserfeedback/archive/refs/tags/v${KF_VERSION}.tar.gz" "kuserfeedback"
-    cmake_build "$BUILD_ROOT/kuserfeedback-${KF_VERSION}" "kuserfeedback"
-    
-    download_extract "https://github.com/KDE/kholidays/archive/refs/tags/v${KF_VERSION}.tar.gz" "kholidays"
-    cmake_build "$BUILD_ROOT/kholidays-${KF_VERSION}" "kholidays"
-    
-    download_extract "https://github.com/KDE/kded/archive/refs/tags/v${KF_VERSION}.tar.gz" "kded"
-    cmake_build "$BUILD_ROOT/kded-${KF_VERSION}" "kded"
-    
-    # Qt additional modules
-    download_extract "https://github.com/qt/qtpositioning/archive/refs/tags/v${QT_VERSION}.tar.gz" "qtpositioning"
-    cd "$BUILD_ROOT/qtpositioning-${QT_VERSION}"
-    mkdir -p build && cd build
-    cmake .. -DCMAKE_INSTALL_PREFIX="$PREFIX" -G Ninja
-    ninja -j"$BUILD_JOBS" && ninja install
-    mark_built "qtpositioning"
-    
-    download_extract "https://github.com/qt/qtlocation/archive/refs/tags/v${QT_VERSION}.tar.gz" "qtlocation"
-    cd "$BUILD_ROOT/qtlocation-${QT_VERSION}"
-    mkdir -p build && cd build
-    cmake .. -DCMAKE_INSTALL_PREFIX="$PREFIX" -G Ninja
-    ninja -j"$BUILD_JOBS" && ninja install
-    mark_built "qtlocation"
-    
-    download_extract "https://github.com/qt/qtspeech/archive/refs/tags/v${QT_VERSION}.tar.gz" "qtspeech"
-    cd "$BUILD_ROOT/qtspeech-${QT_VERSION}"
-    mkdir -p build && cd build
-    cmake .. -DCMAKE_INSTALL_PREFIX="$PREFIX" -G Ninja
-    ninja -j"$BUILD_JOBS" && ninja install
-    mark_built "qtspeech"
-    
-    download_extract "https://github.com/qt/qtsensors/archive/refs/tags/v${QT_VERSION}.tar.gz" "qtsensors"
-    cd "$BUILD_ROOT/qtsensors-${QT_VERSION}"
-    mkdir -p build && cd build
-    cmake .. -DCMAKE_INSTALL_PREFIX="$PREFIX" -G Ninja
-    ninja -j"$BUILD_JOBS" && ninja install
-    mark_built "qtsensors"
+    for mod in "${qt_modules[@]}"; do
+        download_extract "https://github.com/qt/${mod}/archive/refs/tags/v${QT_VERSION}.tar.gz" "$mod" || continue
+        ninja_build "$BUILD_ROOT/${mod}-${QT_VERSION}" "$mod"
+    done
     
     # Third-party libraries
-    download_extract "https://github.com/qcoro/qcoro/archive/refs/tags/v0.12.0.tar.gz" "qcoro"
-    cd "$BUILD_ROOT/qcoro-0.12.0"
-    mkdir -p build && cd build
-    cmake .. -DCMAKE_INSTALL_PREFIX="$PREFIX" -G Ninja
-    ninja -j"$BUILD_JOBS" && ninja install
-    mark_built "qcoro"
+    download_extract "https://github.com/qcoro/qcoro/archive/refs/tags/v0.12.0.tar.gz" "qcoro" && \
+        ninja_build "$BUILD_ROOT/qcoro-0.12.0" "qcoro"
     
-    download_extract "https://github.com/KDE/phonon/archive/refs/tags/v4.12.0.tar.gz" "phonon"
-    cmake_build "$BUILD_ROOT/phonon-4.12.0" "phonon" \
-        -DPHONON_BUILD_QT5=OFF \
-        -DPHONON_BUILD_QT6=ON
+    download_extract "https://github.com/KDE/phonon/archive/refs/tags/v4.12.0.tar.gz" "phonon" && \
+        cmake_build "$BUILD_ROOT/phonon-4.12.0" "phonon" \
+            -DPHONON_BUILD_QT5=OFF -DPHONON_BUILD_QT6=ON
     
-    # Plasma packages
-    download_extract "https://download.kde.org/stable/plasma/${PLASMA_VERSION}/kwayland-${PLASMA_VERSION}.tar.xz" "kwayland"
-    cmake_build "$BUILD_ROOT/kwayland-${PLASMA_VERSION}" "kwayland"
+    # Plasma components
+    local -a plasma_pkgs=(
+        "kwayland"
+        "kdecoration"
+        "libkscreen"
+        "plasma-activities"
+        "plasma-activities-stats"
+        "plasma5support"
+    )
     
-    download_extract "https://download.kde.org/stable/plasma/${PLASMA_VERSION}/kdecoration-${PLASMA_VERSION}.tar.xz" "kdecoration"
-    cmake_build "$BUILD_ROOT/kdecoration-${PLASMA_VERSION}" "kdecoration"
+    for pkg in "${plasma_pkgs[@]}"; do
+        download_extract "https://download.kde.org/stable/plasma/${PLASMA_VERSION}/${pkg}-${PLASMA_VERSION}.tar.xz" "$pkg" || continue
+        cmake_build "$BUILD_ROOT/${pkg}-${PLASMA_VERSION}" "$pkg"
+    done
     
-    download_extract "https://download.kde.org/stable/plasma/${PLASMA_VERSION}/libkscreen-${PLASMA_VERSION}.tar.xz" "libkscreen"
-    cmake_build "$BUILD_ROOT/libkscreen-${PLASMA_VERSION}" "libkscreen"
-    
-    download_extract "https://download.kde.org/stable/plasma/${PLASMA_VERSION}/plasma-activities-${PLASMA_VERSION}.tar.xz" "plasma-activities"
-    cmake_build "$BUILD_ROOT/plasma-activities-${PLASMA_VERSION}" "plasma-activities"
-    
-    download_extract "https://download.kde.org/stable/plasma/${PLASMA_VERSION}/plasma-activities-stats-${PLASMA_VERSION}.tar.xz" "plasma-activities-stats"
-    cmake_build "$BUILD_ROOT/plasma-activities-stats-${PLASMA_VERSION}" "plasma-activities-stats"
-    
-    download_extract "https://download.kde.org/stable/plasma/${PLASMA_VERSION}/plasma5support-${PLASMA_VERSION}.tar.xz" "plasma5support"
-    cmake_build "$BUILD_ROOT/plasma5support-${PLASMA_VERSION}" "plasma5support"
-    
-    download_extract "https://github.com/KDE/libplasma/archive/refs/tags/v${PLASMA_VERSION}.tar.gz" "libplasma"
-    cmake_build "$BUILD_ROOT/libplasma-${PLASMA_VERSION}" "libplasma"
-    
-    download_extract "https://download.kde.org/stable/plasma/${PLASMA_VERSION}/breeze-${PLASMA_VERSION}.tar.xz" "breeze"
-    cmake_build "$BUILD_ROOT/breeze-${PLASMA_VERSION}" "breeze" \
-        -DBUILD_QT6=ON \
-        -DBUILD_QT5=OFF
+    # Breeze
+    download_extract "https://download.kde.org/stable/plasma/${PLASMA_VERSION}/breeze-${PLASMA_VERSION}.tar.xz" "breeze" && \
+        cmake_build "$BUILD_ROOT/breeze-${PLASMA_VERSION}" "breeze" \
+            -DBUILD_QT6=ON -DBUILD_QT5=OFF
     
     log "Build sequence completed!"
 }
 
 # Setup fonts
 setup_fonts() {
+    if is_built "fonts"; then
+        info "Fonts already configured"
+        return 0
+    fi
+    
     log "Setting up fonts..."
     mkdir -p "$HOME/.local/share/fonts"
     cd "$HOME/.local/share/fonts"
     
-    [[ -f "NotoSans-Regular.ttf" ]] || \
-        wget -q https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSans/NotoSans-Regular.ttf
-    [[ -f "NotoSans-Bold.ttf" ]] || \
-        wget -q https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSans/NotoSans-Bold.ttf
-    [[ -f "NotoColorEmoji.ttf" ]] || \
-        wget -q https://github.com/googlefonts/noto-emoji/raw/main/fonts/NotoColorEmoji.ttf
+    local fonts=(
+        "https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSans/NotoSans-Regular.ttf"
+        "https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSans/NotoSans-Bold.ttf"
+        "https://github.com/googlefonts/noto-emoji/raw/main/fonts/NotoColorEmoji.ttf"
+    )
     
-    fc-cache -fv
+    for font_url in "${fonts[@]}"; do
+        local font_file=$(basename "$font_url")
+        [[ -f "$font_file" ]] || wget -q "$font_url"
+    done
+    
+    fc-cache -fv &> "$LOG_DIR/fontconfig.log"
+    mark_built "fonts"
     log "Fonts configured"
 }
 
-# Generate summary
+# Summary
 generate_summary() {
+    local built_count=$(ls "$BUILD_ROOT"/.built_* 2>/dev/null | wc -l)
+    
+    echo ""
     log "Build Summary"
     echo "============================================"
-    echo "Total packages built: $(ls "$BUILD_ROOT"/.built_* 2>/dev/null | wc -l)"
+    echo "Total packages built: $built_count"
     echo "Build directory: $BUILD_ROOT"
     echo "Logs directory: $LOG_DIR"
+    echo "Downloads cached: $DOWNLOAD_CACHE"
     echo "============================================"
-    info "To continue building more packages, run this script again."
-    info "Progress is saved, already-built packages will be skipped."
+    
+    if [[ $built_count -gt 0 ]]; then
+        info "To continue building more packages, run this script again."
+        info "Already-built packages will be skipped automatically."
+    fi
+    
+    echo ""
+    info "Check logs for any warnings or errors: ls -lh $LOG_DIR"
 }
 
-# Main execution
+# Main
 main() {
     log "KDE Plasma ${PLASMA_VERSION} Builder for Termux"
-    log "Using ${BUILD_JOBS} CPU cores"
+    log "Using ${BUILD_JOBS} CPU cores for compilation"
     echo ""
+    
+    # Check we're in Termux
+    if [[ ! -d "/data/data/com.termux" ]]; then
+        error "This script must be run in Termux!"
+        exit 1
+    fi
     
     init_environment
     build_plasma
@@ -397,6 +482,35 @@ main() {
 
 # Trap errors
 trap 'error "Build failed at line $LINENO. Check logs in $LOG_DIR"' ERR
+
+# Handle script arguments
+case "${1:-}" in
+    --clean)
+        warn "Removing build directory..."
+        rm -rf "$BUILD_ROOT"
+        log "Clean complete"
+        exit 0
+        ;;
+    --status)
+        if [[ -d "$BUILD_ROOT" ]]; then
+            echo "Built packages:"
+            ls -1 "$BUILD_ROOT"/.built_* 2>/dev/null | sed 's|.*/\.built_||' || echo "None"
+        else
+            echo "No build directory found"
+        fi
+        exit 0
+        ;;
+    --help|-h)
+        echo "Usage: $0 [OPTIONS]"
+        echo ""
+        echo "Options:"
+        echo "  (no args)   - Run the build"
+        echo "  --clean     - Remove build directory"
+        echo "  --status    - Show built packages"
+        echo "  --help      - Show this help"
+        exit 0
+        ;;
+esac
 
 # Run main
 main "$@"
