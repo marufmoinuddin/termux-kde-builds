@@ -10,9 +10,9 @@ set -e
 echo "Setting up Termux packaging environment..."
 
 # Optimize for Snapdragon 860 (Cortex-A76/A55 - ARMv8.2-A)
-export CFLAGS="-march=armv8.2-a+crypto+dotprod -mtune=cortex-a76 -O3 -pipe -ffast-math -flto"
+export CFLAGS="-march=armv8.2-a+crypto+dotprod -mtune=cortex-a76 -O3 -pipe -ffast-math"
 export CXXFLAGS="${CFLAGS}"
-export LDFLAGS="-Wl,-O3 -Wl,--as-needed -flto"
+export LDFLAGS="-Wl,-O3 -Wl,--as-needed"
 export MAKEFLAGS="-j$(nproc)"
 
 echo "Compiler optimization flags set for Snapdragon 860"
@@ -134,10 +134,10 @@ termux_step_configure() {
         -DCMAKE_INSTALL_PREFIX=\$TERMUX_PREFIX \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_SYSTEM_NAME=Linux \
-        -DCMAKE_C_FLAGS="-march=armv8.2-a+crypto+dotprod -mtune=cortex-a76 -O3 -pipe -ffast-math -flto" \
-        -DCMAKE_CXX_FLAGS="-march=armv8.2-a+crypto+dotprod -mtune=cortex-a76 -O3 -pipe -ffast-math -flto" \
-        -DCMAKE_EXE_LINKER_FLAGS="-Wl,-O3 -Wl,--as-needed -flto" \
-        -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-O3 -Wl,--as-needed -flto" \
+        -DCMAKE_C_FLAGS="-march=armv8.2-a+crypto+dotprod -mtune=cortex-a76 -O3 -pipe -ffast-math" \
+        -DCMAKE_CXX_FLAGS="-march=armv8.2-a+crypto+dotprod -mtune=cortex-a76 -O3 -pipe -ffast-math" \
+        -DCMAKE_EXE_LINKER_FLAGS="-Wl,-O3 -Wl,--as-needed" \
+        -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-O3 -Wl,--as-needed" \
         -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
         -DBUILD_TESTING=OFF \
         -DBUILD_WITH_QT6=ON \
@@ -163,10 +163,15 @@ EOF
 # Function to build a package
 build_package() {
     local pkg_name=$1
+    # Check if package is already built
+    if ls "$DEBS_DIR"/kde-"$pkg_name"_*.deb 1> /dev/null 2>&1; then
+        echo "Package kde-$pkg_name already built, skipping."
+        return 0
+    fi
     echo "Building kde-$pkg_name..."
     ./build-package.sh -I "kde-$pkg_name" > "build-$pkg_name.log" 2>&1 || {
         echo "Build failed for kde-$pkg_name. Check build-$pkg_name.log."
-        exit 1
+        # exit 1  # Commented out for debugging
     }
     echo "Built kde-$pkg_name successfully."
 }
@@ -181,32 +186,32 @@ declare -A PACKAGES=(
     ["kidletime"]="6.16.0||https://github.com/KDE/kidletime.git|v6.16.0|qt6-qtbase|-DBUILD_WITH_QT6=ON||false|"
     ["plasma5support"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/plasma5support-6.4.2.tar.xz|||qt6-qtbase,kf6-kconfig,kf6-kcoreaddons|-DBUILD_WITH_QT6=ON||false|"
     ["layer-shell-qt"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/layer-shell-qt-6.4.2.tar.xz|||qt6-qtbase,kf6-kwayland|-DBUILD_WITH_QT6=ON||false|"
-    ["kcmutils"]="6.16.0||https://github.com/KDE/kcmutils.git|v6.16.0|kf6-kconfig,kf6-kdeclarative|-DBUILD_WITH_QT6=ON||false|"
+    ["kcmutils"]="6.16.0||https://github.com/KDE/kcmutils.git|v6.16.0|kf6-kconfig,kde-kdeclarative|-DBUILD_WITH_QT6=ON||false|"
     ["ksvg"]="6.16.0||https://github.com/KDE/ksvg.git|v6.16.0|qt6-qtbase,kf6-karchive|-DBUILD_WITH_QT6=ON||false|"
     ["aurorae"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/aurorae-6.4.2.tar.xz|||qt6-qtbase,kf6-kconfigwidgets|-DBUILD_WITH_QT6=ON||false|"
     ["frameworkintegration"]="6.16.0||https://github.com/KDE/frameworkintegration.git|v6.16.0|kf6-kconfig,kf6-knotifications|-DBUILD_WITH_QT6=ON||false|"
     ["breeze"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/breeze-6.4.2.tar.xz|||qt6-qtbase,kf6-kconfig,kf6-kwindowsystem|-DBUILD_QT6=ON -DBUILD_QT5=OFF||false|"
     ["breeze-gtk"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/breeze-gtk-6.4.2.tar.xz|||qt6-qtbase,sassc,pycairo|-DBUILD_WITH_QT6=ON||false|"
-    ["kdoctools"]="6.16.0||https://github.com/KDE/kdoctools.git|v6.16.0|kf6-karchive,docbook-xml,docbook-xsl,perl-uri|ln -s \$PWD/bin/meinproc6 \$HOME/bin/KF6::meinproc6; export PATH=\"\$HOME/bin:\$PATH\"||false|"
+    ["kdoctools"]="6.16.0||https://github.com/KDE/kdoctools.git|v6.16.0|kf6-karchive,docbook-xml,docbook-xsl|ln -s \$PWD/bin/meinproc6 \$HOME/bin/KF6::meinproc6; export PATH=\"\$HOME/bin:\$PATH\"||false|"
     ["qtpositioning"]="6.9.1||https://github.com/qt/qtpositioning.git|v6.9.1|qt6-qtbase||true||"
     ["qtlocation"]="6.9.1||https://github.com/qt/qtlocation.git|v6.9.1|qt6-qtbase,kde-qtpositioning||true||"
     ["qcoro"]="0.12.0||https://github.com/qcoro/qcoro.git|v0.12.0|qt6-qtbase,kf6-kcoreaddons||true||"
     ["libplasma"]="6.4.2||https://github.com/KDE/libplasma.git|v6.4.2|qt6-qtbase,kf6-kconfig,kf6-kwindowsystem|-DBUILD_WITH_QT6=ON||false|"
-    ["kstatusnotifieritem"]="6.16.0||https://github.com/KDE/kstatusnotifieritem.git|v6.16.0|kf6-knotifications|-DBUILD_WITH_QT6=ON -DBUILD_PYTHON_BINDINGS=OFF||false|"
+    ["kstatusnotifieritem"]="6.19.0||https://github.com/KDE/kstatusnotifieritem.git|v6.19.0|kf6-knotifications|-DBUILD_WITH_QT6=ON -DBUILD_PYTHON_BINDINGS=OFF||false|"
     ["kdnssd"]="6.16.0||https://github.com/KDE/kdnssd.git|v6.16.0|qt6-qtbase,kf6-kcoreaddons|-DBUILD_WITH_QT6=ON||false|"
     ["syntax-highlighting"]="6.16.0||https://github.com/KDE/syntax-highlighting.git|v6.16.0|qt6-qtbase,kf6-kcoreaddons|sed -i 's|add_subdirectory(quick)|#&|' src/CMakeLists.txt"
     ["libproxy"]="master||https://github.com/libproxy/libproxy.git|master|gsettings-desktop-schemas,duktape,gobject-introspection|meson setup build --prefix=\$TERMUX_PREFIX -Dvapi=false -Ddocs=false -Dintrospection=false; termux_step_make_install() { meson compile -C build; meson install -C build --destdir \$TERMUX_PKG_STAGEDIR; }||false|"
     ["libkexiv2"]="25.07.80||https://github.com/KDE/libkexiv2.git|v25.07.80|qt6-qtbase,kf6-kcoreaddons|-DBUILD_WITH_QT6=ON||false|"
     ["phonon"]="4.12.0||https://github.com/KDE/phonon.git|v4.12.0|qt6-qtbase,pulseaudio-glib|-DPHONON_BUILD_QT5=OFF -DPHONON_BUILD_QT6=ON||false|"
-    ["kio-extras"]="25.07.80|https://github.com/KDE/kio-extras/archive/refs/tags/v25.07.80.tar.gz||qt6-qtbase,kf6-kio,openexr|sed -i '/target_link_libraries(kio_thumbnail/a\        android-shmem' thumbnail/CMakeLists.txt|-DBUILD_WITH_QT6=ON||false|"
+    ["kio-extras"]="25.07.80|https://github.com/KDE/kio-extras/archive/refs/tags/v25.07.80.tar.gz|||qt6-qtbase,kf6-kio,openexr|sed -i '/target_link_libraries(kio_thumbnail/a\        android-shmem' thumbnail/CMakeLists.txt|-DBUILD_WITH_QT6=ON||false|"
     ["kparts"]="6.16.0||https://github.com/KDE/kparts.git|v6.16.0|kf6-kio,kf6-kxmlgui|-DBUILD_WITH_QT6=ON||false|"
     ["krunner"]="6.16.0||https://github.com/KDE/krunner.git|v6.16.0|kf6-kcoreaddons,kf6-kio|-DBUILD_WITH_QT6=ON||false|"
     ["prison"]="6.16.0||https://github.com/KDE/prison.git|v6.16.0|qt6-qtbase,libqrencode,libzxing-cpp,libdmtx|-DBUILD_WITH_QT6=ON||false|"
     ["qtspeech"]="6.9.1||https://github.com/qt/qtspeech.git|v6.9.1|qt6-qtbase||true||"
-    ["ktexteditor"]="6.16.0||https://github.com/KDE/ktexteditor.git|v6.16.0|kf6-kio,kf6-syntax-highlighting|-DBUILD_WITH_QT6=ON||false|"
+    ["ktexteditor"]="6.16.0||https://github.com/KDE/ktexteditor.git|v6.16.0|kf6-kio,kde-syntax-highlighting|-DBUILD_WITH_QT6=ON||false|"
     ["kunitconversion"]="6.16.0||https://github.com/KDE/kunitconversion.git|v6.16.0|kf6-kcoreaddons|-DBUILD_WITH_QT6=ON -DBUILD_PYTHON_BINDINGS=OFF||false|"
     ["spirv-tools"]="master||https://github.com/KhronosGroup/SPIRV-Tools.git|master||python3 utils/git-sync-deps|-DCMAKE_EXE_LINKER_FLAGS=\"-llog\"||false"
-    ["kdeclarative"]="6.16.0||https://github.com/KDE/kdeclarative.git|v6.16.0|kf6-kio,kf6-kquickcharts,kde-spirv-tools|-DBUILD_WITH_QT6=ON||false|"
+    ["kdeclarative"]="6.16.0||https://github.com/KDE/kdeclarative.git|v6.16.0|kf6-kio,kde-spirv-tools|-DBUILD_WITH_QT6=ON||false|"
     ["baloo"]="6.16.0||https://github.com/KDE/baloo.git|v6.16.0|kf6-kio,liblmdb|-DBUILD_WITH_QT6=ON||false|"
     ["baloo-widgets"]="25.07.80||https://github.com/KDE/baloo-widgets.git|v25.07.80|kf6-kio,kde-baloo|-DBUILD_WITH_QT6=ON||false|"
     ["kuserfeedback"]="6.16.0||https://github.com/KDE/kuserfeedback.git|v6.16.0|qt6-qtbase,kf6-kcoreaddons|-DBUILD_WITH_QT6=ON||false|"
@@ -227,11 +232,11 @@ declare -A PACKAGES=(
     ["plasma-workspace-wallpapers"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/plasma-workspace-wallpapers-6.4.2.tar.xz|||qt6-qtbase|-DBUILD_WITH_QT6=ON||false|"
     ["noto-fonts"]="master||mkdir -p \$TERMUX_PKG_STAGEDIR\$TERMUX_PREFIX/share/fonts; wget -P \$TERMUX_PKG_STAGEDIR\$TERMUX_PREFIX/share/fonts https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSans/NotoSans-Regular.ttf; wget -P \$TERMUX_PKG_STAGEDIR\$TERMUX_PREFIX/share/fonts https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSans/NotoSans-Bold.ttf; wget -P \$TERMUX_PKG_STAGEDIR\$TERMUX_PREFIX/share/fonts https://github.com/googlefonts/noto-emoji/raw/main/fonts/NotoColorEmoji.ttf; fc-cache -fv||true||||"
     ["plasma-integration"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/plasma-integration-6.4.2.tar.xz|||qt6-qtbase,kf6-kio|-DBUILD_QT5=OFF -DBUILD_QT6=ON||false|"
-    ["milou"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/milou-6.4.2.tar.xz|||qt6-qtbase,kf6-krunner|-DBUILD_WITH_QT6=ON||false|"
+    ["milou"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/milou-6.4.2.tar.xz|||qt6-qtbase,kde-krunner|-DBUILD_WITH_QT6=ON||false|"
     ["ocean-sound-theme"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/ocean-sound-theme-6.4.2.tar.xz|||qt6-qtbase|-DBUILD_WITH_QT6=ON||false|"
     ["oxygen"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/oxygen-6.4.2.tar.xz|||qt6-qtbase,kf6-kconfigwidgets|-DBUILD_QT5=OFF -DBUILD_QT6=ON||false|"
     ["oxygen-sounds"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/oxygen-sounds-6.4.2.tar.xz|||qt6-qtbase|-DBUILD_WITH_QT6=ON||false|"
-    ["plasma-nano"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/plasma-nano-6.4.2.tar.xz|||qt6-qtbase,kf6-kdeclarative||false||"
+    ["plasma-nano"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/plasma-nano-6.4.2.tar.xz|||qt6-qtbase,kde-kdeclarative||false||"
     ["pulseaudio-qt"]="1.7.0||https://github.com/KDE/pulseaudio-qt.git|v1.7.0|qt6-qtbase,pulseaudio-glib||false||"
     ["plasma-pa"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/plasma-pa-6.4.2.tar.xz|||qt6-qtbase,kde-pulseaudio-qt||false||"
     ["plasma-welcome"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/plasma-welcome-6.4.2.tar.xz|||qt6-qtbase,kf6-knewstuff||false||"
@@ -241,7 +246,7 @@ declare -A PACKAGES=(
     ["qqc2-breeze-style"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/qqc2-breeze-style-6.4.2.tar.xz|||qt6-qtbase,kf6-kirigami||false||"
     ["qqc2-desktop-style"]="master||https://github.com/KDE/qqc2-desktop-style.git|master|qt6-qtbase,kf6-kirigami||false||"
     ["plasma-desktop"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/plasma-desktop-6.4.2.tar.xz|||qt6-qtbase,kf6-kio,kde-kwin-x11|sed -i 's|find_package(KSysGuard CONFIG REQUIRED)|find_package(KWinX11DBusInterface CONFIG REQUIRED)|' CMakeLists.txt; sed -i 's"
-    ["systemsettings"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/systemsettings-6.4.2.tar.xz|||qt6-qtbase,kf6-kcmutils,kde-plasma-desktop|-DBUILD_WITH_QT6=ON||false|"
+    ["systemsettings"]="6.4.2|https://download.kde.org/stable/plasma/6.4.2/systemsettings-6.4.2.tar.xz|||qt6-qtbase,kde-kcmutils,kde-plasma-desktop|-DBUILD_WITH_QT6=ON||false|"
 )
 
 # Create build.sh for each package
