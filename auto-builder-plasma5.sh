@@ -67,10 +67,11 @@ pkg_install() {
     fi
 }
 
-# Download with retry
+# Download with retry and return actual extracted directory
 download_extract() {
     local url="$1"
     local pkg_name="$2"
+    local version="$3"
     local filename=$(basename "$url")
     local cache_file="$DOWNLOAD_CACHE/$filename"
     local max_retries=3
@@ -98,11 +99,19 @@ download_extract() {
     fi
     
     cd "$BUILD_ROOT"
+    
+    # Extract and find the actual directory name
+    local extract_dir=""
     if [[ "$filename" == *.tar.xz ]]; then
+        extract_dir=$(tar -tf "$cache_file" | head -1 | cut -d'/' -f1)
         tar -xf "$cache_file" || return 1
     elif [[ "$filename" == *.tar.gz ]]; then
+        extract_dir=$(tar -tzf "$cache_file" | head -1 | cut -d'/' -f1)
         tar -xzf "$cache_file" || return 1
     fi
+    
+    # Return the actual extracted directory path
+    echo "$BUILD_ROOT/$extract_dir"
 }
 
 # Standard CMake build
@@ -351,19 +360,24 @@ build_plasma() {
         local name="${fw%%:*}"
         local ver="${fw##*:}"
         
-        download_extract "https://github.com/KDE/${name}/archive/refs/tags/v${ver}.tar.gz" "$name" || continue
+        local src_dir=$(download_extract "https://github.com/KDE/${name}/archive/refs/tags/v${ver}.tar.gz" "$name" "$ver")
+        
+        if [[ -z "$src_dir" || ! -d "$src_dir" ]]; then
+            error "Failed to extract $name"
+            continue
+        fi
         
         # Special handling for syntax-highlighting
         if [[ "$name" == "syntax-highlighting" ]]; then
-            patch_cmake "$BUILD_ROOT/${name}-${ver}/src/CMakeLists.txt" \
+            patch_cmake "$src_dir/src/CMakeLists.txt" \
                 "add_subdirectory(quick)" "#add_subdirectory(quick)"
         fi
         
         # Special handling for kunitconversion and kstatusnotifieritem
         if [[ "$name" == "kunitconversion" || "$name" == "kstatusnotifieritem" ]]; then
-            cmake_build "$BUILD_ROOT/${name}-${ver}" "$name" -DBUILD_PYTHON_BINDINGS=OFF
+            cmake_build "$src_dir" "$name" -DBUILD_PYTHON_BINDINGS=OFF
         else
-            cmake_build "$BUILD_ROOT/${name}-${ver}" "$name"
+            cmake_build "$src_dir" "$name"
         fi
     done
     
@@ -376,19 +390,29 @@ build_plasma() {
     )
     
     for mod in "${qt_modules[@]}"; do
-        download_extract "https://github.com/qt/${mod}/archive/refs/tags/v${QT_VERSION}.tar.gz" "$mod" || continue
-        ninja_build "$BUILD_ROOT/${mod}-${QT_VERSION}" "$mod"
+        local src_dir=$(download_extract "https://github.com/qt/${mod}/archive/refs/tags/v${QT_VERSION}.tar.gz" "$mod" "$QT_VERSION")
+        
+        if [[ -z "$src_dir" || ! -d "$src_dir" ]]; then
+            error "Failed to extract $mod"
+            continue
+        fi
+        
+        ninja_build "$src_dir" "$mod"
     done
     
     # Third-party libraries
-    download_extract "https://github.com/qcoro/qcoro/archive/refs/tags/v0.12.0.tar.gz" "qcoro" && \
-        ninja_build "$BUILD_ROOT/qcoro-0.12.0" "qcoro"
+    local qcoro_dir=$(download_extract "https://github.com/qcoro/qcoro/archive/refs/tags/v0.12.0.tar.gz" "qcoro" "0.12.0")
+    if [[ -n "$qcoro_dir" && -d "$qcoro_dir" ]]; then
+        ninja_build "$qcoro_dir" "qcoro"
+    fi
     
-    download_extract "https://github.com/KDE/phonon/archive/refs/tags/v4.12.0.tar.gz" "phonon" && \
-        cmake_build "$BUILD_ROOT/phonon-4.12.0" "phonon" \
+    local phonon_dir=$(download_extract "https://github.com/KDE/phonon/archive/refs/tags/v4.12.0.tar.gz" "phonon" "4.12.0")
+    if [[ -n "$phonon_dir" && -d "$phonon_dir" ]]; then
+        cmake_build "$phonon_dir" "phonon" \
             -DPHONON_BUILD_QT5=OFF -DPHONON_BUILD_QT6=ON
+    fi
     
-    # Plasma components
+    # Plasma components (from KDE downloads, different URL structure)
     local -a plasma_pkgs=(
         "kwayland"
         "kdecoration"
@@ -399,14 +423,22 @@ build_plasma() {
     )
     
     for pkg in "${plasma_pkgs[@]}"; do
-        download_extract "https://download.kde.org/stable/plasma/${PLASMA_VERSION}/${pkg}-${PLASMA_VERSION}.tar.xz" "$pkg" || continue
-        cmake_build "$BUILD_ROOT/${pkg}-${PLASMA_VERSION}" "$pkg"
+        local src_dir=$(download_extract "https://download.kde.org/stable/plasma/${PLASMA_VERSION}/${pkg}-${PLASMA_VERSION}.tar.xz" "$pkg" "$PLASMA_VERSION")
+        
+        if [[ -z "$src_dir" || ! -d "$src_dir" ]]; then
+            error "Failed to extract $pkg"
+            continue
+        fi
+        
+        cmake_build "$src_dir" "$pkg"
     done
     
     # Breeze
-    download_extract "https://download.kde.org/stable/plasma/${PLASMA_VERSION}/breeze-${PLASMA_VERSION}.tar.xz" "breeze" && \
-        cmake_build "$BUILD_ROOT/breeze-${PLASMA_VERSION}" "breeze" \
+    local breeze_dir=$(download_extract "https://download.kde.org/stable/plasma/${PLASMA_VERSION}/breeze-${PLASMA_VERSION}.tar.xz" "breeze" "$PLASMA_VERSION")
+    if [[ -n "$breeze_dir" && -d "$breeze_dir" ]]; then
+        cmake_build "$breeze_dir" "breeze" \
             -DBUILD_QT6=ON -DBUILD_QT5=OFF
+    fi
     
     log "Build sequence completed!"
 }
