@@ -544,6 +544,39 @@ build_plasma_debs() {
             -DPHONON_BUILD_QT5=OFF -DPHONON_BUILD_QT6=ON
     fi
 
+    # kwin-x11 provides KWinDBusInterface needed by plasma-workspace
+    if ! is_built "kwin-x11"; then
+        log "Cloning kwin-x11..."
+        cd "$BUILD_ROOT"
+        if [[ -d "kwin-x11" ]]; then
+            rm -rf kwin-x11
+        fi
+        if git clone --depth 1 https://invent.kde.org/plasma/kwin-x11.git &> "$LOG_DIR/kwin-x11_clone.log"; then
+            # Patches for Termux compatibility
+            patch_cmake "$BUILD_ROOT/kwin-x11/CMakeLists.txt" "find_package(UDev)" "#find_package(UDev)"
+
+            if [[ -f "$BUILD_ROOT/kwin-x11/src/CMakeLists.txt" ]]; then
+                sed -i '/UDev::UDev/d' "$BUILD_ROOT/kwin-x11/src/CMakeLists.txt"
+                # Add android-shmem to linker for shared memory APIs
+                sed -i '/epoxy::epoxy/a\\        android-shmem' "$BUILD_ROOT/kwin-x11/src/CMakeLists.txt"
+            fi
+
+            if [[ -f "$BUILD_ROOT/kwin-x11/src/kcms/rules/CMakeLists.txt" ]]; then
+                sed -i '/KF6::XmlGui/a\\    android-shmem' "$BUILD_ROOT/kwin-x11/src/kcms/rules/CMakeLists.txt"
+            fi
+
+            if cmake_build_deb "$BUILD_ROOT/kwin-x11" "kwin-x11" "$PLASMA_VERSION" \
+                -DBUILD_WAYLAND_COMPOSITOR=OFF \
+                -DBUILD_KWIN_WAYLAND=OFF \
+                -DBUILD_KWIN_X11=ON \
+                -DKF6_HOST_TOOLING=$PREFIX/lib/cmake; then
+                install_stage_to_prefix "kwin-x11"
+            fi
+        else
+            warn "Failed to clone kwin-x11"
+        fi
+    fi
+
     local -a plasma_pkgs=(
         "kwayland:${PLASMA_VERSION}"
         "kdecoration:${PLASMA_VERSION}"
@@ -609,37 +642,6 @@ build_plasma_debs() {
         fi
     fi
     
-    # kwin-x11 (git with extensive patches)
-    if ! is_built "kwin-x11"; then
-        log "Cloning kwin-x11..."
-        cd "$BUILD_ROOT"
-        if [[ -d "kwin-x11" ]]; then
-            rm -rf kwin-x11
-        fi
-        if git clone --depth 1 https://invent.kde.org/plasma/kwin-x11.git &> "$LOG_DIR/kwin-x11_clone.log"; then
-            # Patches for Termux compatibility
-            patch_cmake "$BUILD_ROOT/kwin-x11/CMakeLists.txt" "find_package(UDev)" "#find_package(UDev)"
-            
-            if [[ -f "$BUILD_ROOT/kwin-x11/src/CMakeLists.txt" ]]; then
-                sed -i '/UDev::UDev/d' "$BUILD_ROOT/kwin-x11/src/CMakeLists.txt"
-                # Add android-shmem to linker
-                sed -i '/epoxy::epoxy/a\        android-shmem' "$BUILD_ROOT/kwin-x11/src/CMakeLists.txt"
-            fi
-            
-            if [[ -f "$BUILD_ROOT/kwin-x11/src/kcms/rules/CMakeLists.txt" ]]; then
-                sed -i '/KF6::XmlGui/a\    android-shmem' "$BUILD_ROOT/kwin-x11/src/kcms/rules/CMakeLists.txt"
-            fi
-            
-            cmake_build_deb "$BUILD_ROOT/kwin-x11" "kwin-x11" "$PLASMA_VERSION" \
-                -DBUILD_WAYLAND_COMPOSITOR=OFF \
-                -DBUILD_KWIN_WAYLAND=OFF \
-                -DBUILD_KWIN_X11=ON \
-                -DKF6_HOST_TOOLING=$PREFIX/lib/cmake
-        else
-            warn "Failed to clone kwin-x11"
-        fi
-    fi
-
     local breeze_dir=$(download_extract "https://download.kde.org/stable/plasma/${PLASMA_VERSION}/breeze-${PLASMA_VERSION}.tar.xz" "breeze" "$PLASMA_VERSION")
     if [[ -n "$breeze_dir" && -d "$breeze_dir" ]]; then
         cmake_build_deb "$breeze_dir" "breeze" "$PLASMA_VERSION" \
