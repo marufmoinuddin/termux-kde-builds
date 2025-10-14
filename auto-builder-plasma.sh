@@ -78,14 +78,14 @@ download_extract() {
     local retry=0
     
     if [[ ! -f "$cache_file" ]]; then
-        log "Downloading $pkg_name..."
+        log "Downloading $pkg_name..." >&2
         while [[ $retry -lt $max_retries ]]; do
-            if wget -q --show-progress --timeout=60 -O "$cache_file" "$url"; then
+            if wget -q --show-progress --timeout=60 -O "$cache_file" "$url" &> "$LOG_DIR/${pkg_name}_download.log"; then
                 break
             else
                 retry=$((retry + 1))
                 if [[ $retry -lt $max_retries ]]; then
-                    warn "Download failed, retry $retry/$max_retries..."
+                    warn "Download failed, retry $retry/$max_retries..." >&2
                     sleep 2
                 else
                     error "Failed to download $url after $max_retries attempts"
@@ -95,23 +95,66 @@ download_extract() {
             fi
         done
     else
-        info "Using cached $filename"
+        info "Using cached $filename" >&2
+    fi
+    
+    # Verify file exists and has content
+    if [[ ! -s "$cache_file" ]]; then
+        error "Downloaded file is empty or missing: $cache_file"
+        rm -f "$cache_file"
+        return 1
     fi
     
     cd "$BUILD_ROOT"
     
     # Extract and find the actual directory name
     local extract_dir=""
+    local tar_output=""
+    
     if [[ "$filename" == *.tar.xz ]]; then
-        extract_dir=$(tar -tf "$cache_file" | head -1 | cut -d'/' -f1)
-        tar -xf "$cache_file" || return 1
+        # Get directory name from archive
+        extract_dir=$(tar -tf "$cache_file" 2>/dev/null | head -1 | cut -d'/' -f1)
+        if [[ -z "$extract_dir" ]]; then
+            error "Could not determine directory name from $filename"
+            return 1
+        fi
+        
+        # Extract
+        if ! tar -xf "$cache_file" &> "$LOG_DIR/${pkg_name}_extract.log"; then
+            error "Failed to extract $filename"
+            cat "$LOG_DIR/${pkg_name}_extract.log" >&2
+            return 1
+        fi
+        
     elif [[ "$filename" == *.tar.gz ]]; then
-        extract_dir=$(tar -tzf "$cache_file" | head -1 | cut -d'/' -f1)
-        tar -xzf "$cache_file" || return 1
+        # Get directory name from archive
+        extract_dir=$(tar -tzf "$cache_file" 2>/dev/null | head -1 | cut -d'/' -f1)
+        if [[ -z "$extract_dir" ]]; then
+            error "Could not determine directory name from $filename"
+            return 1
+        fi
+        
+        # Extract
+        if ! tar -xzf "$cache_file" &> "$LOG_DIR/${pkg_name}_extract.log"; then
+            error "Failed to extract $filename"
+            cat "$LOG_DIR/${pkg_name}_extract.log" >&2
+            return 1
+        fi
+    else
+        error "Unsupported archive format: $filename"
+        return 1
+    fi
+    
+    # Verify extraction
+    local full_path="$BUILD_ROOT/$extract_dir"
+    if [[ ! -d "$full_path" ]]; then
+        error "Extracted directory not found: $full_path"
+        error "Archive contained: $(tar -tf "$cache_file" 2>/dev/null | head -5)"
+        return 1
     fi
     
     # Return the actual extracted directory path
-    echo "$BUILD_ROOT/$extract_dir"
+    echo "$full_path"
 }
 
 # Standard CMake build
@@ -360,12 +403,20 @@ build_plasma() {
         local name="${fw%%:*}"
         local ver="${fw##*:}"
         
-        local src_dir=$(download_extract "https://github.com/KDE/${name}/archive/refs/tags/v${ver}.tar.gz" "$name" "$ver")
+        log "Processing $name v$ver..."
         
-        if [[ -z "$src_dir" || ! -d "$src_dir" ]]; then
-            error "Failed to extract $name"
+        local src_dir=$(download_extract "https://github.com/KDE/${name}/archive/refs/tags/v${ver}.tar.gz" "$name" "$ver")
+        local extract_status=$?
+        
+        if [[ $extract_status -ne 0 || -z "$src_dir" || ! -d "$src_dir" ]]; then
+            error "Failed to extract or locate $name (exit: $extract_status, dir: '$src_dir')"
+            # Debug: list what's in the downloads directory
+            info "Download cache contents:"
+            ls -lh "$DOWNLOAD_CACHE"/*${name}* 2>/dev/null || echo "No files found for $name"
             continue
         fi
+        
+        info "Source directory: $src_dir"
         
         # Special handling for syntax-highlighting
         if [[ "$name" == "syntax-highlighting" ]]; then
